@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>九齿编译优化 T1-2-1 概念拆解知识树</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121936;
+      --panel-soft: #192347;
+      --panel-strong: #223160;
+      --line: #3a4c86;
+      --text: #e9eefc;
+      --muted: #9fb1df;
+      --accent: #7cc6ff;
+      --accent-2: #8cffc5;
+      --warn: #ffd580;
+      --shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(124, 198, 255, 0.14), transparent 32%),
+        radial-gradient(circle at top right, rgba(140, 255, 197, 0.12), transparent 28%),
+        linear-gradient(180deg, #0a1022, #090d18 60%, #070b13);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .page {
+      max-width: 1700px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(25, 35, 71, 0.96), rgba(15, 22, 44, 0.94));
+      border: 1px solid rgba(124, 198, 255, 0.14);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main,
+    .hero-side,
+    .controls,
+    .tree-card,
+    .detail-card {
+      padding: 20px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .title {
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(124, 198, 255, 0.12);
+      border: 1px solid rgba(124, 198, 255, 0.18);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .hero-side ul,
+    .detail-list,
+    .guide-list {
+      margin: 12px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 360px minmax(720px, 1fr) 380px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .controls {
+      position: sticky;
+      top: 18px;
+    }
+
+    .controls h2,
+    .tree-card h2,
+    .detail-card h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .panel-head h2 {
+      margin-bottom: 0;
+    }
+
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .segmented {
+      display: inline-flex;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(124, 198, 255, 0.18);
+      background: rgba(8, 14, 28, 0.55);
+    }
+
+    .segmented button {
+      border-radius: 0;
+      padding: 10px 10px;
+      background: transparent;
+      color: var(--muted);
+      border: 0;
+      font-weight: 700;
+    }
+
+    .segmented button.active {
+      color: #07111d;
+      background: linear-gradient(180deg, #8cffc5, #67f0b0);
+    }
+
+    .search {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(124, 198, 255, 0.2);
+      background: rgba(8, 14, 28, 0.75);
+      color: var(--text);
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #07111d;
+      background: linear-gradient(180deg, #8fd7ff, #6bbcff);
+      font-weight: 600;
+    }
+
+    button.secondary {
+      color: var(--text);
+      background: rgba(124, 198, 255, 0.1);
+      border: 1px solid rgba(124, 198, 255, 0.18);
+    }
+
+    .legend {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .legend .swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 4px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .swatch-top { background: #5cc8ff; }
+    .swatch-mid { background: #8cffc5; }
+    .swatch-leaf { background: #ffd580; }
+
+    .tree-card {
+      overflow: auto;
+      min-height: 720px;
+    }
+
+    .tree-card[data-tree-view="space"] {
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .tree-card[data-tree-view="space"].dragging {
+      cursor: grabbing;
+    }
+
+    .tree-card:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      margin: 0;
+      border-radius: 0;
+      padding: 20px;
+      background: linear-gradient(180deg, rgba(11, 16, 32, 0.99), rgba(8, 13, 24, 0.99));
+    }
+
+    .tree-card:fullscreen .tree-wrap {
+      min-width: 1400px;
+      min-height: calc(100vh - 96px);
+    }
+
+    .tree-card:fullscreen[data-tree-view="space"] .tree-wrap {
+      min-width: 100%;
+    }
+
+    .tree-card:fullscreen .tree {
+      min-height: calc(100vh - 120px);
+      align-items: flex-start;
+    }
+
+    .tree-card:fullscreen .node {
+      max-width: 300px;
+    }
+
+    .tree-wrap {
+      width: max-content;
+      min-width: 100%;
+      padding-bottom: 16px;
+    }
+
+    .tree-stage {
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .tree-stage.hidden {
+      display: none;
+    }
+
+    .tree {
+      display: block;
+      width: max-content;
+      min-width: 100%;
+      padding: 8px 16px 36px;
+      overflow: visible;
+    }
+
+    .tree > ul {
+      display: table;
+      margin: 0 auto;
+    }
+
+    .outline-root {
+      display: none;
+      padding: 10px 6px 20px;
+    }
+
+    .tree-card[data-tree-view="vertical"] .outline-root {
+      display: block;
+    }
+
+    .tree-card[data-tree-view="vertical"] .tree-stage {
+      display: none;
+    }
+
+    .outline {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--text);
+    }
+
+    .outline-item {
+      margin: 6px 0;
+      padding-left: 12px;
+      border-left: 2px solid rgba(58, 76, 134, 0.55);
+    }
+
+    .outline-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .outline-node {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(124, 198, 255, 0.14);
+      background: rgba(8, 14, 28, 0.55);
+      cursor: pointer;
+      transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+
+    .outline-node:hover,
+    .outline-node.active {
+      border-color: rgba(140, 255, 197, 0.55);
+      transform: translateY(-1px);
+    }
+
+    .outline-title {
+      font-weight: 800;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .outline-desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      margin-top: 6px;
+      white-space: normal;
+    }
+
+    .outline-children {
+      margin-top: 8px;
+      padding-left: 12px;
+    }
+
+    .outline-item.hidden {
+      display: none !important;
+    }
+
+    .tree ul {
+      position: relative;
+      padding-top: 26px;
+      padding-left: 0;
+      white-space: nowrap;
+      margin: 0;
+    }
+
+    .tree li {
+      display: inline-block;
+      list-style: none;
+      text-align: center;
+      position: relative;
+      padding: 26px 10px 0 10px;
+      vertical-align: top;
+    }
+
+    .tree li::before,
+    .tree li::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 50%;
+      border-top: 2px solid var(--line);
+      width: 50%;
+      height: 26px;
+    }
+
+    .tree li::after {
+      right: auto;
+      left: 50%;
+      border-left: 2px solid var(--line);
+    }
+
+    .tree li:only-child::after,
+    .tree li:only-child::before {
+      display: none;
+    }
+
+    .tree li:only-child {
+      padding-top: 0;
+    }
+
+    .tree li:first-child::before,
+    .tree li:last-child::after {
+      border: 0 none;
+    }
+
+    .tree li:last-child::before {
+      border-right: 2px solid var(--line);
+      border-radius: 0 12px 0 0;
+    }
+
+    .tree li:first-child::after {
+      border-radius: 12px 0 0 0;
+    }
+
+    .tree ul ul::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      border-left: 2px solid var(--line);
+      width: 0;
+      height: 26px;
+    }
+
+    .node {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      min-width: 220px;
+      max-width: 260px;
+      text-align: left;
+      padding: 14px 14px 12px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(17, 29, 61, 0.98), rgba(12, 19, 37, 0.98));
+      border: 1px solid rgba(124, 198, 255, 0.18);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      cursor: pointer;
+    }
+
+    .node:hover,
+    .node.active {
+      transform: translateY(-2px);
+      border-color: rgba(140, 255, 197, 0.55);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+    }
+
+    .node.top { border-left: 5px solid #5cc8ff; }
+    .node.mid { border-left: 5px solid #8cffc5; }
+    .node.leaf { border-left: 5px solid #ffd580; }
+
+    .node-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.4;
+    }
+
+    .node-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      white-space: normal;
+    }
+
+    .node-meta {
+      font-size: 11px;
+      color: #b7c5ea;
+      background: rgba(124, 198, 255, 0.08);
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+
+    .tree li.hidden,
+    .tree li.hidden > ul,
+    .tree li.hidden > .node {
+      display: none !important;
+    }
+
+    .detail-card {
+      position: sticky;
+      top: 18px;
+      min-height: 720px;
+    }
+
+    .detail-top {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #09131f;
+      background: linear-gradient(180deg, #8cffc5, #67f0b0);
+      font-weight: 700;
+    }
+
+    .detail-title {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .detail-summary {
+      color: var(--text);
+      line-height: 1.8;
+      margin-bottom: 16px;
+      font-size: 15px;
+    }
+
+    .detail-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(124, 198, 255, 0.12);
+    }
+
+    .detail-section h3 {
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .detail-kv {
+      display: grid;
+      gap: 10px;
+    }
+
+    .detail-kv div {
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(8, 14, 28, 0.55);
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .detail-kv strong {
+      color: var(--text);
+    }
+
+    .foot {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .mark {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    @media (max-width: 1380px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .controls,
+      .detail-card {
+        position: static;
+        min-height: auto;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div class="card hero-main">
+        <h1 class="title">九齿编译优化 T1-2-1<br />从零开始概念拆解知识树</h1>
+        <p class="subtitle">
+          目标不是让你立刻写优化，而是先把赛题里每一个“黑话”拆成最小认知单元。整张图严格是一棵树：每个概念只归属一个父节点，避免环和重复定义。
+        </p>
+        <div class="chips">
+          <span class="chip">适合 AI Infra 新手</span>
+          <span class="chip">单文件 HTML</span>
+          <span class="chip">可搜索 / 可折叠 / 可点击</span>
+          <span class="chip">覆盖赛题目标、代码、测试、评分、交付</span>
+        </div>
+      </div>
+      <div class="card hero-side">
+        <h2>先记住 4 句话</h2>
+        <ul>
+          <li>这题本质上是在做 <span class="mark">“更聪明的代码生成”</span>，不是重新发明算子。</li>
+          <li>你要做的是 <span class="mark">识别某些可确定的输入形态</span>，然后走更快的特化路径。</li>
+          <li>任何特化都必须保留 <span class="mark">fallback 通用路径</span>，否则隐藏测试会炸。</li>
+          <li>评审看四件事：<span class="mark">正确</span>、<span class="mark">命中特化</span>、<span class="mark">生成代码更简洁</span>、<span class="mark">运行更快</span>。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="grid">
+      <aside class="card controls">
+        <h2>使用方式</h2>
+        <input id="searchInput" class="search" type="text" placeholder="搜索概念，如 mask / stride / fallback / benchmark" />
+        <div class="toolbar">
+          <button id="expandBtn">全部展开</button>
+          <button id="collapseBtn" class="secondary">折叠除主干外节点</button>
+        </div>
+        <div class="legend">
+          <div><span class="swatch swatch-top"></span>主干主题：比赛目标、系统、交付、评测</div>
+          <div><span class="swatch swatch-mid"></span>中间概念：把黑话翻成人话</div>
+          <div><span class="swatch swatch-leaf"></span>最小叶子：不能再拆的基础概念</div>
+        </div>
+        <div class="detail-section">
+          <h3>读图顺序</h3>
+          <ul class="guide-list">
+            <li>先点根节点，建立“这题到底要我干嘛”的整体感。</li>
+            <li>再看“系统长什么样”，理解 `tensor`、`shape`、`stride`、`layout`。</li>
+            <li>然后看“特化为什么会更快”，理解 `mask`、`pointer arithmetic`、`fast path`。</li>
+            <li>最后看“如何交卷”，理解测试、benchmark、报告、评分公式。</li>
+          </ul>
+        </div>
+        <div class="detail-section">
+          <h3>新手建议</h3>
+          <ul class="guide-list">
+            <li>第一次做这题时，最容易落地的是 `contiguous fast path` 或 `broadcast / scalar fast path`。</li>
+            <li>别一上来追性能，先能稳定判断“什么时候命中特化，什么时候必须回退”。</li>
+            <li>看生成代码时，不要只盯 runtime，也要数 `mask`、`stride` 和 pointer 表达式有没有减少。</li>
+          </ul>
+        </div>
+      </aside>
+
+      <main id="treeCard" class="card tree-card" data-tree-view="horizontal">
+        <div class="panel-head">
+          <h2>知识树</h2>
+          <div class="panel-actions">
+            <div class="segmented" role="group" aria-label="知识树视图切换">
+              <button id="viewHorizontalBtn" type="button" class="active" title="水平树状布局">水平</button>
+              <button id="viewVerticalBtn" type="button" title="垂直列表布局">垂直</button>
+              <button id="viewSpaceBtn" type="button" title="空间拖拽缩放">空间</button>
+            </div>
+            <button id="fullscreenBtn" class="secondary" type="button" title="全屏查看知识树">全屏查看</button>
+          </div>
+        </div>
+        <div class="tree-wrap">
+          <div id="treeStage" class="tree-stage">
+            <div id="treeRoot" class="tree"></div>
+          </div>
+          <div id="outlineRoot" class="outline-root"></div>
+        </div>
+      </main>
+
+      <aside class="card detail-card">
+        <h2>节点说明</h2>
+        <div id="detailPanel">
+          <div class="detail-top">
+            <span class="badge">默认选中</span>
+          </div>
+          <h3 class="detail-title">T1-2-1 赛题全貌</h3>
+          <p class="detail-summary">
+            这道题要求你在 NineToothed 的代码生成系统里增加 1 到 2 类“可靠可判定”的特化逻辑，让某些输入在生成 Triton 代码时更简洁、更少冗余表达式，并在不满足条件时安全回退到原来的通用路径。
+          </p>
+          <div class="detail-section">
+            <h3>你最后要交什么</h3>
+            <div class="detail-kv">
+              <div><strong>代码：</strong>主要改 `generation.py`、`aot.py`，必要时补一点 `tensor.py` helper。</div>
+              <div><strong>测试：</strong>命中特化、fallback 正确性、generated source 结构测试都要有。</div>
+              <div><strong>benchmark：</strong>至少 2 个命中特化 case + 2 个 fallback case，并记录速度和代码指标。</div>
+              <div><strong>报告：</strong>解释 baseline 哪里弱、你怎么特化、为什么安全、收益和盲区是什么。</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <p class="foot">
+      数据源来自赛题文档《九齿编译优化（1-2-X 系列）赛题与规则》的 T1-2-1 部分。本页面只做教学拆解，不修改原规则。
+    </p>
+  </div>
+
+  <script>
+    const treeData = {
+      title: "T1-2-1 赛题全貌",
+      type: "top",
+      summary: "目标是在 NineToothed 的代码生成链路里，把一部分“已经可以确定输入形态”的场景从通用代码路径中分流出来，生成更专门、更短、更快的 Triton 代码，同时保留 fallback。",
+      human: "一句人话：你不是在重写框架，而是在让代码生成器少做没必要的通用处理。",
+      why: "因为 baseline 优先正确性和通用性，所以它在很多本可确认的场景里仍然会生成过于保守的代码。",
+      children: [
+        {
+          title: "1. 比赛要解决什么问题",
+          type: "top",
+          summary: "先理解题目本身在优化什么，避免把注意力放错到模型、训练或算子数学公式上。",
+          human: "一句人话：这是编译和代码生成题，不是模型算法题。",
+          why: "只有看清“优化对象是生成代码”，后续 `mask`、`stride`、`variant` 才有意义。",
+          children: [
+            {
+              title: "1.1 代码生成",
+              type: "mid",
+              summary: "代码生成是指框架根据张量信息和算子表达式，自动拼出要运行的低层代码，而不是手写每一种 kernel。",
+              human: "一句人话：输入是高层算子描述，输出是 GPU 能跑的程序文本。",
+              why: "赛题的主要改动点就在 `generation.py` 这类负责“拼代码”的地方。",
+              children: [
+                {
+                  title: "1.1.1 高层描述",
+                  type: "leaf",
+                  summary: "高层描述是算子意图，比如加法、广播、读写哪个 tensor，而不是具体某条机器指令。",
+                  human: "一句人话：先说要干什么，再由系统翻译成怎么干。"
+                },
+                {
+                  title: "1.1.2 低层代码",
+                  type: "leaf",
+                  summary: "低层代码是最终交给 Triton 或 GPU 执行的 kernel 源码，里面会出现地址计算、mask、load/store 等细节。",
+                  human: "一句人话：这是离硬件更近、能真正跑起来的代码。"
+                }
+              ]
+            },
+            {
+              title: "1.2 编译优化",
+              type: "mid",
+              summary: "编译优化不是改结果，而是在结果不变的前提下，让生成的代码更短、更少判断、更少冗余计算、更快。",
+              human: "一句人话：输出一样，但走的路更省。",
+              why: "评分里的 correctness 和 runtime 是分开看的，说明优化不能破坏语义。",
+              children: [
+                {
+                  title: "1.2.1 正确性",
+                  type: "leaf",
+                  summary: "正确性表示输出必须与 baseline 语义等价，在给定容差内一致。",
+                  human: "一句人话：先算对，再算快。"
+                },
+                {
+                  title: "1.2.2 性能",
+                  type: "leaf",
+                  summary: "性能主要看 runtime，也看生成代码结构是否更简洁。",
+                  human: "一句人话：不仅要快，还要能解释为什么更快。"
+                }
+              ]
+            },
+            {
+              title: "1.3 特化 specialization",
+              type: "mid",
+              summary: "特化是针对某些已知条件，生成一条比通用路径更窄但更高效的代码路径。",
+              human: "一句人话：当你已经知道输入长什么样，就不必继续写万能代码。",
+              why: "整道题的核心就是做 1 到 2 类受约束特化。",
+              children: [
+                {
+                  title: "1.3.1 命中特化",
+                  type: "leaf",
+                  summary: "命中特化表示输入条件满足预设规则，于是进入 fast path。",
+                  human: "一句人话：条件满足，走近路。"
+                },
+                {
+                  title: "1.3.2 回退 fallback",
+                  type: "leaf",
+                  summary: "回退表示一旦条件不满足，就回到原来的通用路径，确保各种未知情况仍然正确。",
+                  human: "一句人话：看不准就别硬优化。"
+                },
+                {
+                  title: "1.3.3 启用条件",
+                  type: "leaf",
+                  summary: "启用条件是你明确定义的判断规则，必须可靠、可解释、不可碰运气。",
+                  human: "一句人话：你得说清楚什么时候能走特化。"
+                }
+              ]
+            },
+            {
+              title: "1.4 baseline weakness analysis",
+              type: "mid",
+              summary: "你要先分析 baseline 在哪些 case 上生成代码偏保守，指出低效点再对症下药。",
+              human: "一句人话：先找到旧实现的痛点，再证明你的改动有价值。",
+              why: "赛题强制要求 weakness analysis，并且要至少举出 2 个具体 case。",
+              children: [
+                {
+                  title: "1.4.1 冗余 mask",
+                  type: "leaf",
+                  summary: "本来不会越界、也没有尾块的情况下，仍然在 `tl.load` 或 `tl.store` 上加了边界掩码。",
+                  human: "一句人话：明明整块都有效，还在反复问“这格能不能读”。"
+                },
+                {
+                  title: "1.4.2 冗余 stride / offset",
+                  type: "leaf",
+                  summary: "本来可以线性访问，却还保留复杂的多维步长和偏移计算。",
+                  human: "一句人话：能直接走直线，却还在拐弯算坐标。"
+                },
+                {
+                  title: "1.4.3 冗余 pointer arithmetic",
+                  type: "leaf",
+                  summary: "地址计算表达式比实际需要更复杂，生成代码里重复出现很多可省略的指针计算。",
+                  human: "一句人话：本可一次算完地址，却拆成很多小算式。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: "2. 系统和代码里有哪些核心对象",
+          type: "top",
+          summary: "这部分把赛题里的基础黑话拆掉，因为你只有理解 tensor 布局和地址计算，才能理解为什么某些特化成立。",
+          human: "一句人话：先认识零件，再谈优化。",
+          children: [
+            {
+              title: "2.1 Tensor",
+              type: "mid",
+              summary: "tensor 是多维数组，除了数值本身，还带有形状、步长、偏移和布局等元信息。",
+              human: "一句人话：不仅有数据，还附带“这堆数据如何排布”的说明书。",
+              children: [
+                {
+                  title: "2.1.1 shape",
+                  type: "leaf",
+                  summary: "shape 表示每一维有多大，例如 `[2, 3, 4]` 表示 3 维，分别大小为 2、3、4。",
+                  human: "一句人话：shape 决定箱子有几层、每层放多少格。"
+                },
+                {
+                  title: "2.1.2 stride",
+                  type: "leaf",
+                  summary: "stride 表示某一维坐标加 1 时，底层地址要跳过多少元素。",
+                  human: "一句人话：沿某个方向走一步，内存里要跨几格。"
+                },
+                {
+                  title: "2.1.3 offset",
+                  type: "leaf",
+                  summary: "offset 表示当前 tensor 视图相对于底层存储起点的偏移。",
+                  human: "一句人话：真实起点不一定从数组第 0 个元素开始。"
+                },
+                {
+                  title: "2.1.4 layout",
+                  type: "leaf",
+                  summary: "layout 是 shape、stride、offset 共同描述出的内存排布方式。",
+                  human: "一句人话：layout 说明数据在内存里到底摆成了什么样。"
+                }
+              ]
+            },
+            {
+              title: "2.2 contiguous",
+              type: "mid",
+              summary: "contiguous 表示数据在内存中按一种规则连续排布，访问时通常能用更简单的线性地址公式。",
+              human: "一句人话：数据是一整段顺着排的，不需要绕来绕去找。",
+              why: "它直接对应赛题允许类别里的 `contiguous fast path`。",
+              children: [
+                {
+                  title: "2.2.1 线性访问",
+                  type: "leaf",
+                  summary: "线性访问是把多维索引折成一个连续下标，地址计算简单。",
+                  human: "一句人话：按顺序一格一格地读写。"
+                },
+                {
+                  title: "2.2.2 非 contiguous",
+                  type: "leaf",
+                  summary: "非连续布局通常需要更一般化的 stride 计算，不能假设下一个元素就在旁边。",
+                  human: "一句人话：数据可能被切片、转置或跨行放置。"
+                }
+              ]
+            },
+            {
+              title: "2.3 broadcast / scalar / size-1",
+              type: "mid",
+              summary: "广播相关概念决定了某些维度是否真的需要参与地址变化，这是另一类重要特化来源。",
+              human: "一句人话：有些维度虽然存在，但地址其实不用动。",
+              children: [
+                {
+                  title: "2.3.1 broadcast",
+                  type: "leaf",
+                  summary: "broadcast 是把较小张量按规则扩展成较大形状参与计算，但不一定真的复制数据。",
+                  human: "一句人话：逻辑上变大，物理上可能还是原来那一份。"
+                },
+                {
+                  title: "2.3.2 scalar",
+                  type: "leaf",
+                  summary: "scalar 是标量，只有一个值；在很多运算中相当于所有位置都读取同一个数。",
+                  human: "一句人话：整个 tensor 都在反复用同一个数字。"
+                },
+                {
+                  title: "2.3.3 size-1 维",
+                  type: "leaf",
+                  summary: "size-1 维就是长度为 1 的维度，沿该维移动时地址通常不变。",
+                  human: "一句人话：这一维看起来存在，实则没有“不同位置”。"
+                }
+              ]
+            },
+            {
+              title: "2.4 tile",
+              type: "mid",
+              summary: "tile 是把大问题切成固定大小的小块逐块处理，GPU kernel 常按 tile 组织并行。",
+              human: "一句人话：先把大矩阵切成很多小砖块再干活。",
+              why: "是否整除 tile，决定是否会出现尾块和边界判断。",
+              children: [
+                {
+                  title: "2.4.1 tile 覆盖",
+                  type: "leaf",
+                  summary: "tile 覆盖表示一个 tile 负责处理输入的一块区域。",
+                  human: "一句人话：每个线程块负责一小片地盘。"
+                },
+                {
+                  title: "2.4.2 尾块 tail",
+                  type: "leaf",
+                  summary: "尾块是末尾不足一个完整 tile 的区域，通常需要特殊边界处理。",
+                  human: "一句人话：切砖时剩下的一截边角料。"
+                },
+                {
+                  title: "2.4.3 divisible",
+                  type: "leaf",
+                  summary: "divisible 表示尺寸刚好能被 tile 大小整除，因此没有尾块。",
+                  human: "一句人话：能整切完，不留边角。"
+                }
+              ]
+            },
+            {
+              title: "2.5 Triton kernel 基础词汇",
+              type: "mid",
+              summary: "赛题里出现的 generated source metric 都与 Triton kernel 文本相关。",
+              human: "一句人话：你最终优化的是一段 Triton 风格的 GPU 代码。",
+              children: [
+                {
+                  title: "2.5.1 kernel",
+                  type: "leaf",
+                  summary: "kernel 是在 GPU 上执行的一段并行程序。",
+                  human: "一句人话：给 GPU 的一个工作函数。"
+                },
+                {
+                  title: "2.5.2 tl.load",
+                  type: "leaf",
+                  summary: "`tl.load` 表示从显存读数据进入计算。",
+                  human: "一句人话：把外面的数据搬进来。"
+                },
+                {
+                  title: "2.5.3 tl.store",
+                  type: "leaf",
+                  summary: "`tl.store` 表示把结果写回显存。",
+                  human: "一句人话：把算完的值写出去。"
+                },
+                {
+                  title: "2.5.4 mask",
+                  type: "leaf",
+                  summary: "mask 是读写保护条件，用来避免访问越界或无效元素。",
+                  human: "一句人话：先确认这格合法，再决定读不读、写不写。"
+                },
+                {
+                  title: "2.5.5 pointer arithmetic",
+                  type: "leaf",
+                  summary: "pointer arithmetic 是根据索引、stride、offset 组合出真实内存地址的计算表达式。",
+                  human: "一句人话：把多维坐标翻译成内存地址。"
+                }
+              ]
+            },
+            {
+              title: "2.6 AOT variant",
+              type: "mid",
+              summary: "AOT variant 是基于提前已知的信息，选择或生成不同版本 kernel 的机制。",
+              human: "一句人话：如果有些事实在运行前就知道，就可以提前备好多套更专门的代码。",
+              why: "赛题允许类别里有 `layout-known AOT variant`。",
+              children: [
+                {
+                  title: "2.6.1 AOT",
+                  type: "leaf",
+                  summary: "AOT 是 Ahead Of Time，表示在实际运行之前就已经生成或决定好一部分代码版本。",
+                  human: "一句人话：不是临场现想，而是提前准备。"
+                },
+                {
+                  title: "2.6.2 variant",
+                  type: "leaf",
+                  summary: "variant 是同一算子的不同实现版本，适配不同输入条件。",
+                  human: "一句人话：同一个任务，准备几条不同跑法。"
+                },
+                {
+                  title: "2.6.3 layout-known",
+                  type: "leaf",
+                  summary: "layout-known 表示布局信息已经足够明确，能可靠选择更特定的代码版本。",
+                  human: "一句人话：你已经知道数据怎么摆的，就别再当未知处理。"
+                }
+              ]
+            },
+            {
+              title: "2.7 赛题涉及的代码文件",
+              type: "mid",
+              summary: "赛题并不是让你满仓库乱改，而是明确指出主要改动入口。",
+              human: "一句人话：重点是改生成逻辑，不是重构全项目。",
+              children: [
+                {
+                  title: "2.7.1 generation.py",
+                  type: "leaf",
+                  summary: "负责根据条件拼接生成代码，是特化逻辑的主战场之一。",
+                  human: "一句人话：在这里决定要生成什么样的 kernel 文本。"
+                },
+                {
+                  title: "2.7.2 aot.py",
+                  type: "leaf",
+                  summary: "与 AOT variant 选择、构造或分发逻辑相关，是另一主战场。",
+                  human: "一句人话：在这里决定提前准备和命中哪种版本。"
+                },
+                {
+                  title: "2.7.3 tensor.py",
+                  type: "leaf",
+                  summary: "必要时可加少量 helper，用于查询 tensor 元信息，辅助更可靠的判断。",
+                  human: "一句人话：需要额外问 tensor 一点信息时，才少量补这里。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: "3. 哪些特化类别是允许做的",
+          type: "top",
+          summary: "不是所有灵感都能拿来算分，赛题只允许在明确列出的 4 类里选 1 到 2 类作为主优化点。",
+          human: "一句人话：自由发挥可以有，但得围绕官方给的靶子打。",
+          children: [
+            {
+              title: "3.1 contiguous fast path",
+              type: "mid",
+              summary: "当输入或输出的 contiguous、offset、stride 信息足以说明可以线性访问时，生成更简洁的线性 pointer 表达式。",
+              human: "一句人话：既然已经确定是直线读取，就别继续展开多维公式。",
+              children: [
+                {
+                  title: "3.1.1 触发前提",
+                  type: "leaf",
+                  summary: "你必须能可靠判断访问是连续且线性的，而不是凭 case 猜。",
+                  human: "一句人话：确定无误再简化地址。"
+                },
+                {
+                  title: "3.1.2 优化目标",
+                  type: "leaf",
+                  summary: "减少 stride / offset 展开，减少 pointer arithmetic 表达式数量。",
+                  human: "一句人话：把地址计算压扁、压短。"
+                }
+              ]
+            },
+            {
+              title: "3.2 divisible tile fast path",
+              type: "mid",
+              summary: "当静态 shape 或 AOT 信息足以说明 tile 覆盖没有尾块时，生成无边界 mask 或更少 mask 的 `tl.load` / `tl.store`。",
+              human: "一句人话：整块都合法，就别每次都做边界保护。",
+              children: [
+                {
+                  title: "3.2.1 触发前提",
+                  type: "leaf",
+                  summary: "你能证明尺寸被 tile 整除，不会出现尾块。",
+                  human: "一句人话：确定切得整整齐齐。"
+                },
+                {
+                  title: "3.2.2 优化目标",
+                  type: "leaf",
+                  summary: "删除本不需要的 mask，或减少 mask 组合表达式。",
+                  human: "一句人话：少问“会不会越界”，因为已经知道不会。"
+                }
+              ]
+            },
+            {
+              title: "3.3 broadcast / scalar fast path",
+              type: "mid",
+              summary: "当广播维度、size-1 维或标量输入可以确定时，简化 load、offset、mask 和地址计算。",
+              human: "一句人话：某些维度地址不变时，就不要继续算它。",
+              children: [
+                {
+                  title: "3.3.1 触发前提",
+                  type: "leaf",
+                  summary: "你能可靠确认哪些维度是广播的、哪些输入本质上是同一个值。",
+                  human: "一句人话：先确认“地址不动”这件事是真的。"
+                },
+                {
+                  title: "3.3.2 优化目标",
+                  type: "leaf",
+                  summary: "减少重复 load、无意义 offset 和多余 mask。",
+                  human: "一句人话：同一个数没必要绕着读很多次。"
+                }
+              ]
+            },
+            {
+              title: "3.4 layout-known AOT variant",
+              type: "mid",
+              summary: "利用 AOT 已知的 contiguity、divisibility、stride 或 shape 约束，选择或生成更专门的 kernel variant。",
+              human: "一句人话：既然赛前就知道布局特征，就提前准备针对版。",
+              children: [
+                {
+                  title: "3.4.1 触发前提",
+                  type: "leaf",
+                  summary: "输入布局或尺寸约束必须在 variant 选择阶段就已经明确。",
+                  human: "一句人话：前置知识必须真的是前置知识。"
+                },
+                {
+                  title: "3.4.2 优化目标",
+                  type: "leaf",
+                  summary: "避免本该进入更专门 variant 的 case 掉回过度通用实现。",
+                  human: "一句人话：让该走专家通道的 case 真正走上专家通道。"
+                }
+              ]
+            },
+            {
+              title: "3.5 不允许的取巧方式",
+              type: "mid",
+              summary: "特化可以组合，但不能通过识别测试名、benchmark 名、函数名或固定输入尺寸硬编码命中。",
+              human: "一句人话：你要识别的是数据形态，不是考试题号。",
+              children: [
+                {
+                  title: "3.5.1 文件名硬编码",
+                  type: "leaf",
+                  summary: "根据测试脚本名称决定是否开优化，属于违规。",
+                  human: "一句人话：不能靠认考卷作弊。"
+                },
+                {
+                  title: "3.5.2 固定尺寸硬编码",
+                  type: "leaf",
+                  summary: "只对某个特定 shape 值手写分支，不具备一般性，也会被隐藏测试打掉。",
+                  human: "一句人话：不能只会做样题。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: "4. 一份合格提交要做哪些工作",
+          type: "top",
+          summary: "赛题不是只改代码，而是完整闭环：分析问题、加特化、保留 fallback、写测试、跑 benchmark、写报告。",
+          human: "一句人话：你要证明的不只是“我改了”，而是“我知道为什么这么改，而且改对了”。",
+          children: [
+            {
+              title: "4.1 weakness analysis",
+              type: "mid",
+              summary: "指出 baseline 至少 2 个具体 case 的弱势代码生成表现，并归类低效点。",
+              human: "一句人话：先展示旧版本哪里不够聪明。",
+              children: [
+                {
+                  title: "4.1.1 具体 case",
+                  type: "leaf",
+                  summary: "不能只说抽象观点，必须给出明确场景。",
+                  human: "一句人话：要举例，不要空谈。"
+                },
+                {
+                  title: "4.1.2 低效分类",
+                  type: "leaf",
+                  summary: "需要对应到规则列出的低效类别，比如冗余 mask 或没命中 variant。",
+                  human: "一句人话：要说明慢在什么地方。"
+                }
+              ]
+            },
+            {
+              title: "4.2 实现特化逻辑",
+              type: "mid",
+              summary: "在 `generation.py` 或 `aot.py` 中实现 1 到 2 类特化，并明确启用条件。",
+              human: "一句人话：把判断和生成代码的逻辑真正写进去。",
+              children: [
+                {
+                  title: "4.2.1 命中条件",
+                  type: "leaf",
+                  summary: "条件要精确、稳定、可复现，不能过宽。",
+                  human: "一句人话：宁可少命中，也不能乱命中。"
+                },
+                {
+                  title: "4.2.2 fallback 条件",
+                  type: "leaf",
+                  summary: "当特化条件不满足或证据不足时，必须走原有通用路径。",
+                  human: "一句人话：保底兜住所有剩余场景。"
+                }
+              ]
+            },
+            {
+              title: "4.3 测试",
+              type: "mid",
+              summary: "测试既要证明命中特化，也要证明回退场景还正确，而且要证明生成代码结构真的变了。",
+              human: "一句人话：不仅要测结果，还要测“是不是走了你想要的那条路”。",
+              children: [
+                {
+                  title: "4.3.1 specialization hit 测试",
+                  type: "leaf",
+                  summary: "至少 2 个，证明在预期场景下确实命中特化。",
+                  human: "一句人话：你说会走快路，那就要真走。"
+                },
+                {
+                  title: "4.3.2 fallback correctness 测试",
+                  type: "leaf",
+                  summary: "至少 2 个，证明不满足条件时仍能正确回到通用实现。",
+                  human: "一句人话：快路没命中时，老路依然能跑通。"
+                },
+                {
+                  title: "4.3.3 generated source 结构测试",
+                  type: "leaf",
+                  summary: "至少 2 个，检查生成源码中的 mask、stride、pointer 表达式或 variant 命中情况。",
+                  human: "一句人话：要直接验证生成代码长什么样，而不是只看最终数值。"
+                }
+              ]
+            },
+            {
+              title: "4.4 benchmark",
+              type: "mid",
+              summary: "benchmark 用来量化收益，至少覆盖 2 个命中特化 case 和 2 个不应命中的 fallback case。",
+              human: "一句人话：既要证明快路有收益，也要证明不该走快路时没有误伤。",
+              children: [
+                {
+                  title: "4.4.1 baseline_runtime_ms",
+                  type: "leaf",
+                  summary: "baseline 版本运行时间，作为对照。",
+                  human: "一句人话：老版本有多快。"
+                },
+                {
+                  title: "4.4.2 submitted_runtime_ms",
+                  type: "leaf",
+                  summary: "你提交版本的运行时间。",
+                  human: "一句人话：新版本有多快。"
+                },
+                {
+                  title: "4.4.3 speedup",
+                  type: "leaf",
+                  summary: "速度提升比例，通常等于 baseline_runtime / submitted_runtime。",
+                  human: "一句人话：大于 1 才说明变快。"
+                },
+                {
+                  title: "4.4.4 specialization_hit",
+                  type: "leaf",
+                  summary: "记录该场景是否命中特化，方便把收益和路径关联起来。",
+                  human: "一句人话：这个样本到底有没有走优化。"
+                },
+                {
+                  title: "4.4.5 generated code metric",
+                  type: "leaf",
+                  summary: "至少记录一个代码结构指标，如 `mask_expr_count`、`stride_expr_count`、`pointer_expr_count`、`variant_name`、`source_line_count`。",
+                  human: "一句人话：要留证据说明代码确实更简洁了。"
+                }
+              ]
+            },
+            {
+              title: "4.5 报告和附加文件",
+              type: "mid",
+              summary: "除了代码和测试，你还要提交报告、Honor Code 和引用说明。",
+              human: "一句人话：比赛要可审计、可复现、可追责。",
+              children: [
+                {
+                  title: "4.5.1 HONOR_CODE.md",
+                  type: "leaf",
+                  summary: "说明独立完成范围和诚信承诺。",
+                  human: "一句人话：明确哪些内容是你自己完成的。"
+                },
+                {
+                  title: "4.5.2 REFERENCE.md",
+                  type: "leaf",
+                  summary: "披露参考资料、外部实现和 AI 工具使用情况。",
+                  human: "一句人话：引用要说清楚，不能偷渡来源。"
+                },
+                {
+                  title: "4.5.3 赛题报告",
+                  type: "leaf",
+                  summary: "解释方案、验证方法、指标对比、回退场景和已知风险。",
+                  human: "一句人话：把你的技术判断讲明白。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: "5. 评测和评分是怎么工作的",
+          type: "top",
+          summary: "理解评分方式，才能知道工作重点不能偏。很多新手只盯 runtime，但这题不是单维竞速。",
+          human: "一句人话：不是谁跑得最快谁就赢，先得活过正确性门槛。",
+          children: [
+            {
+              title: "5.1 Correctness 门槛",
+              type: "mid",
+              summary: "隐藏 correctness 至少要通过 29/30，否则总分最高只有 40。",
+              human: "一句人话：先拿到入场券，再谈总分。",
+              children: [
+                {
+                  title: "5.1.1 语义等价",
+                  type: "leaf",
+                  summary: "你的特化和 baseline 在结果意义上必须一致。",
+                  human: "一句人话：快不代表可以算错。"
+                },
+                {
+                  title: "5.1.2 隐藏用例",
+                  type: "leaf",
+                  summary: "隐藏用例会覆盖命中特化和 fallback，两边都会测。",
+                  human: "一句人话：考官会同时看你会不会加速，也看你会不会保底。"
+                }
+              ]
+            },
+            {
+              title: "5.2 Specialization Coverage",
+              type: "mid",
+              summary: "隐藏特化命中用例看你该命中的是否命中、该回退的是否回退，误命中会扣分。",
+              human: "一句人话：不是命中越多越好，而是命中要准。",
+              children: [
+                {
+                  title: "5.2.1 hit_score",
+                  type: "leaf",
+                  summary: "每个应命中特化的 case 正确命中得 1 分。",
+                  human: "一句人话：该上快路时确实上了。"
+                },
+                {
+                  title: "5.2.2 false_hit_penalty",
+                  type: "leaf",
+                  summary: "每个本应 fallback 却错误命中特化的 case 扣 1 分。",
+                  human: "一句人话：乱开优化会被倒扣。"
+                }
+              ]
+            },
+            {
+              title: "5.3 Generated Code Metric",
+              type: "mid",
+              summary: "评委会看生成源码是不是更简洁，例如 mask 数量、stride / pointer 表达式数量、variant 命中和代码行数。",
+              human: "一句人话：你要给出“为什么更快”的结构证据。",
+              children: [
+                {
+                  title: "5.3.1 reduction",
+                  type: "leaf",
+                  summary: "常用公式是 `(baseline_count - submitted_count) / baseline_count`，表示冗余减少比例。",
+                  human: "一句人话：比旧版本少了多少。"
+                },
+                {
+                  title: "5.3.2 满分线",
+                  type: "leaf",
+                  summary: "单用例 `reduction >= 0.25` 可得满分，0 到 0.25 之间线性计分。",
+                  human: "一句人话：减少 25% 以上就算结构收益很明显。"
+                }
+              ]
+            },
+            {
+              title: "5.4 Runtime",
+              type: "mid",
+              summary: "隐藏 benchmark 按 speedup 线性计分，`speedup >= 1.10` 满分，性能回退会被记录。",
+              human: "一句人话：至少要比 baseline 快，最好快 10% 以上。",
+              children: [
+                {
+                  title: "5.4.1 speedup >= 1.10",
+                  type: "leaf",
+                  summary: "达到或超过 10% 提升时，该项单用例得满分。",
+                  human: "一句人话：10% 是一个重要台阶。"
+                },
+                {
+                  title: "5.4.2 speedup < 0.95",
+                  type: "leaf",
+                  summary: "低于 0.95 代表明显性能回退，该用例得 0 分并记一次回退。",
+                  human: "一句人话：慢了超过 5% 就会很难看。"
+                }
+              ]
+            },
+            {
+              title: "5.5 工程与报告质量",
+              type: "mid",
+              summary: "除了技术指标，还看边界处理、测试质量、报告质量、有没有硬编码和引用披露。",
+              human: "一句人话：这不是只看跑分的黑箱比赛。",
+              children: [
+                {
+                  title: "5.5.1 工程边界",
+                  type: "leaf",
+                  summary: "改动范围清楚、条件清楚、fallback 清楚，才算工程质量好。",
+                  human: "一句人话：要像一个能维护的补丁，而不是一次性 hack。"
+                },
+                {
+                  title: "5.5.2 合规披露",
+                  type: "leaf",
+                  summary: "参考资料、外部工具和 AI 辅助范围都要披露。",
+                  human: "一句人话：透明本身也是评分项。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: "6. 比赛中的常见误区",
+          type: "top",
+          summary: "很多新手会在这里踩坑，提前识别能省掉大量返工。",
+          human: "一句人话：这些不是技术概念，但直接决定你会不会被隐藏评测打穿。",
+          children: [
+            {
+              title: "6.1 只看 runtime 不看结构",
+              type: "mid",
+              summary: "如果只是偶然跑快，但代码结构没有更简洁，generated code metric 可能拿不到好分。",
+              human: "一句人话：要同时解释“快在哪里”。",
+              children: [
+                {
+                  title: "6.1.1 缺少源码证据",
+                  type: "leaf",
+                  summary: "没有结构测试和指标记录，就难证明收益来自你的特化。",
+                  human: "一句人话：口说无凭，要留痕。"
+                }
+              ]
+            },
+            {
+              title: "6.2 把特化写得太激进",
+              type: "mid",
+              summary: "条件判断太宽会导致错误命中，特别容易在隐藏 fallback case 上扣分。",
+              human: "一句人话：错走快路比少走快路更危险。",
+              children: [
+                {
+                  title: "6.2.1 false hit",
+                  type: "leaf",
+                  summary: "false hit 指本不该命中特化却命中了。",
+                  human: "一句人话：自以为聪明，实际判错场景。"
+                }
+              ]
+            },
+            {
+              title: "6.3 把特化写成硬编码",
+              type: "mid",
+              summary: "按 benchmark 名称、测试名或固定尺寸做分支属于违规，也很难泛化。",
+              human: "一句人话：不要为考试答案写程序。",
+              children: [
+                {
+                  title: "6.3.1 隐藏评测规避",
+                  type: "leaf",
+                  summary: "针对路径、文件名或环境变量做特殊逻辑都可能被判无效提交。",
+                  human: "一句人话：考官明确禁止“识别考场环境”。"
+                }
+              ]
+            },
+            {
+              title: "6.4 删除或弱化测试",
+              type: "mid",
+              summary: "赛题明确禁止删除、跳过或弱化既有测试。",
+              human: "一句人话：不能靠降低标准让自己通过。",
+              children: [
+                {
+                  title: "6.4.1 无效提交风险",
+                  type: "leaf",
+                  summary: "绕过评测逻辑会直接进入违规与无效提交条款。",
+                  human: "一句人话：这不是技巧，是红线。"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+
+    const treeRoot = document.getElementById("treeRoot");
+    const treeCard = document.getElementById("treeCard");
+    const treeStage = document.getElementById("treeStage");
+    const outlineRoot = document.getElementById("outlineRoot");
+    const detailPanel = document.getElementById("detailPanel");
+    const searchInput = document.getElementById("searchInput");
+    const expandBtn = document.getElementById("expandBtn");
+    const collapseBtn = document.getElementById("collapseBtn");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    const viewHorizontalBtn = document.getElementById("viewHorizontalBtn");
+    const viewVerticalBtn = document.getElementById("viewVerticalBtn");
+    const viewSpaceBtn = document.getElementById("viewSpaceBtn");
+
+    const nodeElements = [];
+    const outlineElements = [];
+    let treeView = "horizontal";
+
+    let spaceScale = 1;
+    let spaceTx = 0;
+    let spaceTy = 0;
+    let isDraggingSpace = false;
+    let lastDragX = 0;
+    let lastDragY = 0;
+
+    function makeId(title, idx) {
+      return `${title.replace(/[^\w\u4e00-\u9fa5]+/g, "-")}-${idx}`;
+    }
+
+    function renderNode(node, depth = 0, idx = 0) {
+      const li = document.createElement("li");
+      const card = document.createElement("div");
+      const id = makeId(node.title, idx);
+      node._id = id;
+      node._depth = depth;
+      node._keywords = [node.title, node.summary || "", node.human || "", node.why || ""].join(" ").toLowerCase();
+
+      card.className = `node ${node.type || (depth === 0 ? "top" : node.children ? "mid" : "leaf")}`;
+      card.dataset.nodeId = id;
+      card.innerHTML = `
+        <div class="node-meta">第 ${depth + 1} 层</div>
+        <div class="node-title">${node.title}</div>
+        <div class="node-desc">${node.human || node.summary || ""}</div>
+      `;
+      li.appendChild(card);
+      nodeElements.push({ li, card, node });
+
+      if (node.children && node.children.length) {
+        const ul = document.createElement("ul");
+        node.children.forEach((child, childIdx) => {
+          ul.appendChild(renderNode(child, depth + 1, Number(`${idx}${childIdx + 1}`)));
+        });
+        li.appendChild(ul);
+      }
+      return li;
+    }
+
+    function buildTree() {
+      const wrapper = document.createElement("ul");
+      wrapper.appendChild(renderNode(treeData, 0, 1));
+      treeRoot.innerHTML = "";
+      treeRoot.appendChild(wrapper);
+    }
+
+    function buildOutline() {
+      outlineElements.length = 0;
+
+      function renderOutlineNode(node) {
+        const li = document.createElement("li");
+        li.className = "outline-item";
+        li.dataset.nodeId = node._id;
+
+        const row = document.createElement("div");
+        row.className = "outline-row";
+
+        const card = document.createElement("div");
+        card.className = "outline-node";
+        card.dataset.nodeId = node._id;
+
+        const title = document.createElement("div");
+        title.className = "outline-title";
+        title.textContent = node.title;
+
+        const desc = document.createElement("div");
+        desc.className = "outline-desc";
+        desc.textContent = node.human || node.summary || "";
+
+        card.appendChild(title);
+        card.appendChild(desc);
+        row.appendChild(card);
+        li.appendChild(row);
+
+        outlineElements.push({ li, card, node });
+
+        if (node.children && node.children.length) {
+          const children = document.createElement("ul");
+          children.className = "outline outline-children";
+          node.children.forEach((child) => {
+            children.appendChild(renderOutlineNode(child));
+          });
+          li.appendChild(children);
+        }
+
+        return li;
+      }
+
+      const rootList = document.createElement("ul");
+      rootList.className = "outline";
+      rootList.appendChild(renderOutlineNode(treeData));
+      outlineRoot.innerHTML = "";
+      outlineRoot.appendChild(rootList);
+    }
+
+    function selectNode(nodeId) {
+      nodeElements.forEach(({ card, node }) => {
+        card.classList.toggle("active", node._id === nodeId);
+      });
+
+      outlineElements.forEach(({ card, node }) => {
+        card.classList.toggle("active", node._id === nodeId);
+      });
+
+      const hit = nodeElements.find((item) => item.node._id === nodeId);
+      if (!hit) return;
+      const { node } = hit;
+      const childCount = node.children ? node.children.length : 0;
+      detailPanel.innerHTML = `
+        <div class="detail-top">
+          <span class="badge">${node.type === "top" ? "主干主题" : node.children ? "中间概念" : "最小叶子"}</span>
+        </div>
+        <h3 class="detail-title">${node.title}</h3>
+        <p class="detail-summary">${node.summary || ""}</p>
+        <div class="detail-section">
+          <h3>一句人话</h3>
+          <div class="detail-kv">
+            <div><strong>直觉解释：</strong>${node.human || "这是一个基础节点。"}</div>
+            <div><strong>为什么重要：</strong>${node.why || "它是理解父节点所需的基础组成部分。"}</div>
+            <div><strong>节点信息：</strong>层级 ${node._depth + 1}，子节点 ${childCount} 个。</div>
+          </div>
+        </div>
+        ${childCount ? `
+          <div class="detail-section">
+            <h3>你接下来该看什么</h3>
+            <ul class="detail-list">
+              ${node.children.map((child) => `<li>${child.title}</li>`).join("")}
+            </ul>
+          </div>
+        ` : `
+          <div class="detail-section">
+            <h3>叶子节点含义</h3>
+            <div class="detail-kv">
+              <div><strong>阅读建议：</strong>这是最小知识单元之一。理解它后，再回到父节点看它怎样参与更大的优化逻辑。</div>
+            </div>
+          </div>
+        `}
+      `;
+    }
+
+    function expandAll() {
+      document.querySelectorAll(".tree ul").forEach((ul) => {
+        ul.style.display = "block";
+      });
+    }
+
+    function collapseToMainBranches() {
+      document.querySelectorAll(".tree li > ul").forEach((ul) => {
+        const parentNode = ul.parentElement.querySelector(".node");
+        const level = parentNode ? Number((ul.parentElement.querySelector(".node-meta") || {}).textContent?.replace(/[^\d]/g, "") || "1") : 1;
+        ul.style.display = level <= 1 ? "block" : "none";
+      });
+      const rootUl = treeRoot.querySelector("ul");
+      if (rootUl) rootUl.style.display = "block";
+      const rootChildUl = treeRoot.querySelector("li > ul");
+      if (rootChildUl) rootChildUl.style.display = "block";
+    }
+
+    function filterTree(keyword) {
+      const query = keyword.trim().toLowerCase();
+      if (!query) {
+        nodeElements.forEach(({ li }) => li.classList.remove("hidden"));
+        expandAll();
+        outlineElements.forEach(({ li }) => li.classList.remove("hidden"));
+        return;
+      }
+
+      function visit(item) {
+        const selfMatch = item.node._keywords.includes(query);
+        const childItems = item.node.children
+          ? item.node.children.map((child) => nodeElements.find((entry) => entry.node === child))
+          : [];
+        const childMatch = childItems.some((childItem) => visit(childItem));
+        item.li.classList.toggle("hidden", !(selfMatch || childMatch));
+        if (item.li.lastElementChild && item.li.lastElementChild.tagName === "UL") {
+          item.li.lastElementChild.style.display = childMatch || selfMatch ? "block" : "none";
+        }
+        return selfMatch || childMatch;
+      }
+
+      const rootItem = nodeElements.find((entry) => entry.node === treeData);
+      if (rootItem) visit(rootItem);
+
+      function visitOutline(item) {
+        const selfMatch = item.node._keywords.includes(query);
+        const childItems = item.node.children
+          ? item.node.children.map((child) => outlineElements.find((entry) => entry.node === child))
+          : [];
+        const childMatch = childItems.some((childItem) => visitOutline(childItem));
+        item.li.classList.toggle("hidden", !(selfMatch || childMatch));
+        return selfMatch || childMatch;
+      }
+
+      const outlineRootItem = outlineElements.find((entry) => entry.node === treeData);
+      if (outlineRootItem) visitOutline(outlineRootItem);
+    }
+
+    function applySpaceTransform() {
+      treeStage.style.transform = `translate(${spaceTx}px, ${spaceTy}px) scale(${spaceScale})`;
+    }
+
+    function resetSpaceView() {
+      spaceScale = 1;
+      spaceTx = 0;
+      spaceTy = 0;
+      applySpaceTransform();
+    }
+
+    function setTreeView(nextView) {
+      treeView = nextView;
+      treeCard.dataset.treeView = nextView;
+      viewHorizontalBtn.classList.toggle("active", nextView === "horizontal");
+      viewVerticalBtn.classList.toggle("active", nextView === "vertical");
+      viewSpaceBtn.classList.toggle("active", nextView === "space");
+
+      if (nextView === "space") {
+        resetSpaceView();
+      }
+
+      filterTree(searchInput.value || "");
+    }
+
+    buildTree();
+    buildOutline();
+    selectNode(treeData._id);
+    collapseToMainBranches();
+
+    treeRoot.addEventListener("click", (event) => {
+      const nodeCard = event.target.closest(".node");
+      if (!nodeCard) return;
+      const nodeId = nodeCard.dataset.nodeId;
+      selectNode(nodeId);
+      const parentLi = nodeCard.parentElement;
+      const childUl = parentLi.querySelector(":scope > ul");
+      if (childUl) {
+        childUl.style.display = childUl.style.display === "none" ? "block" : "none";
+      }
+    });
+
+    searchInput.addEventListener("input", (event) => {
+      filterTree(event.target.value);
+    });
+
+    expandBtn.addEventListener("click", () => {
+      expandAll();
+    });
+
+    collapseBtn.addEventListener("click", () => {
+      collapseToMainBranches();
+    });
+
+    outlineRoot.addEventListener("click", (event) => {
+      const nodeCard = event.target.closest(".outline-node");
+      if (!nodeCard) return;
+      const nodeId = nodeCard.dataset.nodeId;
+      selectNode(nodeId);
+    });
+
+    viewHorizontalBtn.addEventListener("click", () => {
+      setTreeView("horizontal");
+    });
+
+    viewVerticalBtn.addEventListener("click", () => {
+      setTreeView("vertical");
+    });
+
+    viewSpaceBtn.addEventListener("click", () => {
+      setTreeView("space");
+    });
+
+    treeCard.addEventListener("mousedown", (event) => {
+      if (treeView !== "space") return;
+      if (event.button !== 0) return;
+      if (event.target.closest(".node")) return;
+      isDraggingSpace = true;
+      treeCard.classList.add("dragging");
+      lastDragX = event.clientX;
+      lastDragY = event.clientY;
+    });
+
+    window.addEventListener("mousemove", (event) => {
+      if (!isDraggingSpace) return;
+      const dx = event.clientX - lastDragX;
+      const dy = event.clientY - lastDragY;
+      lastDragX = event.clientX;
+      lastDragY = event.clientY;
+      spaceTx += dx;
+      spaceTy += dy;
+      applySpaceTransform();
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!isDraggingSpace) return;
+      isDraggingSpace = false;
+      treeCard.classList.remove("dragging");
+    });
+
+    treeCard.addEventListener("wheel", (event) => {
+      if (treeView !== "space") return;
+      event.preventDefault();
+
+      const direction = event.deltaY > 0 ? -1 : 1;
+      const factor = direction > 0 ? 1.1 : 0.9;
+      const nextScale = Math.min(2.4, Math.max(0.35, spaceScale * factor));
+
+      const rect = treeCard.getBoundingClientRect();
+      const cursorX = event.clientX - rect.left;
+      const cursorY = event.clientY - rect.top;
+
+      const worldX = (cursorX - spaceTx) / spaceScale;
+      const worldY = (cursorY - spaceTy) / spaceScale;
+
+      spaceScale = nextScale;
+      spaceTx = cursorX - worldX * spaceScale;
+      spaceTy = cursorY - worldY * spaceScale;
+      applySpaceTransform();
+    }, { passive: false });
+
+    function updateFullscreenButton() {
+      const isFullscreen = document.fullscreenElement === treeCard;
+      fullscreenBtn.textContent = isFullscreen ? "退出全屏" : "全屏查看";
+      fullscreenBtn.title = isFullscreen ? "退出知识树全屏" : "全屏查看知识树";
+    }
+
+    fullscreenBtn.addEventListener("click", async () => {
+      if (document.fullscreenElement === treeCard) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (!document.fullscreenElement) {
+        await treeCard.requestFullscreen();
+      }
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      updateFullscreenButton();
+    });
+
+    updateFullscreenButton();
+    setTreeView("horizontal");
+  </script>
+</body>
+</html>
