@@ -1,0 +1,38 @@
+# Pitfall Problems Log
+> 记录 AI agentic coding 过程中遇到的所有问题，倒序排列（最新在前）
+> 用途：环境重建参考 + "你遇到过最难的bug是什么"素材
+
+| # | 时间 | 问题描述 | 复现步骤 | 解决方案 | 已解决 | 备注 |
+|---|------|---------|---------|---------|--------|------|
+| 14 | 2026-06-25 ~12:45 | 整除 tile 与不整除 tile 生成完全相同的 Triton 源码，mask/stride/pointer 无一减少 | `ninetoothed.jit` 分别对 size=1024(tile=256 整除) 和 size=1000(tile=256 不整除) 生成 kernel，比较源码 | 确认是 competition 要修复的核心弱势——generation.py 未考虑 divisibility | ❌ 待 Phase 4 | generation.py:725-778 无条件生成 6 个 mask 子条件 |
+| 13 | 2026-06-25 ~12:30 | `test_jagged.py` 全灭 (16个)，PyTorch 2.5 nested tensor API 不兼容 | `pytest tests/ --ignore=tests/test_aot.py` | 不修复——jagged tensor 不在本次赛题范围内 | ❌ WONTFIX | `aten.to_padded_tensor.default` NotImplementedError；RTX 2060 环境预期行为 |
+| 12 | 2026-06-25 ~12:30 | `test_attention.py` fp32 全灭 (4个)，Triton 3.1.0 `map::at` bug on SM 7.5 | `pytest tests/test_attention.py -v` | 不修复——Triton 3.1.0 + SM 7.5 已知不兼容，fp16 全部通过 | ❌ WONTFIX | 5090 节点 (SM 12.0) 上无此问题 |
+| 11 | 2026-06-25 ~12:25 | `test_ipynb.py` 失败：`jupytext` not found | `pytest tests/ -v` | `pip install jupytext` | ✅ | 可选依赖，不属于 pyproject.toml 的硬依赖 |
+| 10 | 2026-06-25 ~12:16 | AOT 测试 (test_aot.py) 需要 `nvcc` 编译 .so | `pytest tests/test_aot.py -v` → `FileNotFoundError: nvcc` | `sudo apt install cuda-nvcc-12-8`（需先加 NVIDIA apt repo） | ✅ | 3.4GB .deb 下载；安装后需 `export PATH="/usr/local/cuda-12.8/bin:$PATH"` |
+| 9 | 2026-06-25 ~12:10 | bf16 测试在 RTX 2060 上失败：`Feature '.bf16' requires .target sm_80 or higher` | `test_aot.py::test_add[False-45327-dtype0-bf16-cuda]` | RTX 2060 = SM 7.5 (Turing)，硬件不支持 bf16。跳过 bf16 测试 `-k "not bf16"` | ❌ 硬件限制 | 5090 (SM 12.0) 完全支持 bf16 |
+| 8 | 2026-06-25 ~12:00 | `pytest --timeout=300` 报 unrecognized arguments | `pytest tests/ -x --timeout=300` | `pip install pytest-timeout` | ✅ | tasking.md 里写了但没装 |
+| 7 | 2026-06-25 ~11:50 | `_compile()` 调用 `sys.executable` 但 aot.py 缺少 `import sys` | 修改 `"python"` → `sys.executable` 后运行测试 | 在 aot.py 头部加 `import sys` | ✅ | 位于 `import subprocess` 之后 |
+| 6 | 2026-06-25 ~11:45 | `_compile()` subprocess 调用 `python` 在 Ubuntu 24.04 找不到 | `pytest tests/test_aot.py -v` → `FileNotFoundError: python` | 改 aot.py:761 `"python"` → `sys.executable` | ✅ | Ubuntu 24.04 只有 `python3`，无 `python` 软链 |
+| 5 | 2026-06-25 ~11:40 | Triton kernel 编译失败：`Python.h: No such file or directory` | `.venv/bin/python /tmp/triton_smoke.py` | `sudo apt install python3.12-dev` | ✅ | Triton 初始化时编译 `cuda_utils` C 扩展需要 Python 头文件 |
+| 4 | 2026-06-25 ~02:39 | `nvidia-smi` segfault — WSL2 内核模块与 Windows 驱动不同步 | 升级 Windows 驱动到 610.62 后 `nvidia-smi` core dump | `wsl --shutdown` (在 Win11 PowerShell 运行) 然后重新开 WSL2 | ✅ | WSL2 重启后自动加载新版 nvidia 内核模块 |
+| 3 | 2026-06-25 ~02:35 | Windows 宿主机升级 NVIDIA 驱动 (610.62 / CUDA 13.3) | 去 NVIDIA 官网下载 RTX 2060 Studio Driver | 下载安装、重启 Windows、`wsl --shutdown` | ✅ | 原有驱动 576.02 / CUDA 12.9 不支持 PyTorch 2.12 |
+| 2 | 2026-06-25 ~02:12 | PyTorch 2.12 需要 CUDA 13.0 驱动，当前 CUDA 12.9 | `torch.cuda.is_available()` → False | 方案 A: 降级 PyTorch 到 2.5.1+cu124（与 CUDA 12.x 兼容）；方案 B: 升级驱动 | ✅ | 先走 A，后来用户升级驱动到 610.62 / CUDA 13.3 |
+| 1 | 2026-06-25 ~02:10 | `pip install` 报 "externally-managed-environment" (PEP 668) | `pip install torch triton` | `python3 -m venv .venv && .venv/bin/pip install ...` | ✅ | Ubuntu 24.04 默认 Python 3.12 不允许系统级 pip |
+
+---
+
+## 复用 Prompt
+
+将此 prompt 给 Claude Code，让它把新问题插入本文件：
+
+```
+记录以下问题到 docs/pitfall-problems-{时间戳}.log（若已有今天的文件则追加）：
+- 问题描述：[写清楚什么坏了]
+- 复现步骤：[做了什么触发]
+- 解决方案：[怎么修的，或为什么暂时不修]
+- 是否已解决：✅/❌ + 原因
+
+规则：
+1. 时间倒序——新问题插到表格第一行（row 1，紧接表头）
+2. 已有行序号 # 自动重排
+3. 如果问题与已有记录相同，在备注列追加 "→ 复现于 YYYY-MM-DD"
