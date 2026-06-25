@@ -13,8 +13,8 @@
 
 | 项目 | 路径 | 角色 |
 |------|------|------|
-| ninetoothed (主库 fork) | `D:\ml\ninetooth2026\ninetoothed` | 修改目标——赛题代码改动在此 |
-| ntops (算子库 fork) | `D:\ml\ninetooth2026\ntops` | 验证试验场——用其测试和 benchmark |
+| ninetoothed (主库 fork) | `<workspace>/ninetoothed` | 修改目标——赛题代码改动在此 |
+| ntops (算子库 fork) | `<workspace>/ntops` | 验证试验场——用其测试和 benchmark |
 
 **已有基础设施**（ninetoothed 主库已包含）:
 - AOT 层面已有 divisibility / contiguity / size-type 特化 (`aot.py`)
