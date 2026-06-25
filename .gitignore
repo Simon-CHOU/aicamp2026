@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.pyo
+.loop_state.json
+results/

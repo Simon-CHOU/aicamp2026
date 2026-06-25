@@ -2,8 +2,8 @@
 
 **赛题**: 九齿编译优化 T1-2-1 — NineToothed 代码生成特化增强挑战  
 **GitHub ID**: Simon-CHOU  
-**日期**: 2026-06-25  
-**最终截止**: 2026-07-13 0:00（即 7/12 午夜，剩余约 18 天）  
+**日期**: 2026-06-26  
+**最终截止**: 2026-07-13 0:00（即 7/12 午夜，剩余约 17 天）  
 **正确性门槛**: 隐藏 correctness **29/30**（未达标总分上限 40/100）  
 **隐藏评测规模**: 30 correctness + 12 specialization + 8 code metric + 8 benchmark = **58 个用例**
 
@@ -11,10 +11,25 @@
 
 ## 当前状态速览
 
+> **说明**: 下文中 `<workspace>` 代指当前工作区根目录。
+
 | 项目 | 路径 | 角色 |
 |------|------|------|
-| ninetoothed (主库 fork) | `<workspace>/ninetoothed` | 修改目标——赛题代码改动在此 |
-| ntops (算子库 fork) | `<workspace>/ntops` | 验证试验场——用其测试和 benchmark |
+| ninetoothed (主库 fork) | `<workspace>/ninetoothed` | **修改目标 + PR 提交**——赛题代码改动在此 |
+| ntops (算子库 fork) | `<workspace>/ntops` | **本地验证试验场**——用其测试和 benchmark，不提交 PR |
+| aicamp2026 (工程支撑) | `<workspace>/aicamp2026` | **loop 工程基础设施**——benchmark / pitfall / loop engine |
+
+**分支与 PR 信息（已确认）**:
+
+| 项目 | 值 |
+|------|-----|
+| Fork 地址 | `https://github.com/Simon-CHOU/ninetoothed` |
+| 开发分支 | `2026-spring-Simon-CHOU-T1-2-1` |
+| PR 目标 | `https://github.com/InfiniTensor/ninetoothed` (main) |
+| PR 标题 | `[2026春季][T1-2-1] Simon-CHOU` |
+| 提交载体 | **仅 ninetoothed**——ntops 不需要单独 PR |
+
+> **结论确认** (来自 `提交说明.md`): 已确定在 ninetoothed 库提交 PR 而非 ntops 库。已按要求 fork 主库并创建 `2026-spring-Simon-CHOU-T1-2-1` 分支。ntops 仅作为本地验证试验场使用。
 
 **已有基础设施**（ninetoothed 主库已包含）:
 - AOT 层面已有 divisibility / contiguity / size-type 特化 (`aot.py`)
@@ -26,12 +41,120 @@
 
 ---
 
+## Phase 0: Loop 工程基础设施搭建（预计 0.5 天，已在 6/26 完成）
+
+> **Exit Criteria**: benchmark/ pitfall/ loop/ 三个包可通过 Python import；pitfall 可解析已有 .log；loop engine 可初始化并读取当前状态
+
+### 0.1 基础设施架构
+
+```
+aicamp2026/
+├── benchmark/              # 基准测试与评测基础设施
+│   ├── __init__.py
+│   ├── schema.py           # 数据结构：BenchmarkCase, BenchmarkResult, TestEvalResult
+│   ├── runner.py           # BenchmarkRunner: 编译、计时、指标收集
+│   ├── testeval.py         # TestEval: pytest 运行 + specialization 检查 + source 结构检查
+│   └── cases/              # Benchmark 用例库
+│       ├── __init__.py     # ALL_CASES, SPEC_HIT_CASES, FALLBACK_CASES 注册表
+│       ├── spec_hit/       # 必须命中特化的 case
+│       │   ├── divisible_tile.py
+│       │   └── contiguous.py
+│       └── fallback/       # 不应命中特化的 fallback case
+│           ├── non_divisible.py
+│           └── non_contiguous.py
+├── pitfall/                # 问题追踪系统
+│   ├── __init__.py
+│   ├── models.py           # PitfallProblem dataclass
+│   ├── tracker.py          # PitfallTracker: 增删查改 + 统计 + 导出
+│   ├── log_parser.py       # 解析已有 pitfall-problems-*.log
+│   ├── cli.py              # 命令行接口
+│   └── templates/
+│       └── pitfall.log.md  # 新 log 文件模板
+├── loop/                   # AI 驱动的循环迭代引擎
+│   ├── __init__.py
+│   ├── engine.py           # LoopEngine: 主驱动器
+│   ├── state.py            # 状态机：LoopState, LoopConfig, PhaseResult, LoopResult
+│   ├── prompts.py          # 每阶段 AI prompt 模板
+│   ├── orchestrator.py     # LoopOrchestrator: 分析状态 → 产生下一步动作
+│   ├── checkpoint.py       # 每阶段出口条件（布尔谓词）
+│   └── README.md           # 使用文档
+└── docs/
+    ├── tasking.md           # 本文件
+    └── pitfall-problems-*.log
+```
+
+### 0.2 Loop 工程循环模型
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐
+│ testeval  │───→│ analyze  │───→│implement │
+│ (pytest + │    │ (weakness│    │ (code    │
+│  spec检査) │    │  + gaps) │    │  changes)│
+└──────────┘    └──────────┘    └──────────┘
+      ↑                              │
+      │         ┌──────────┐         │
+      └─────────│ pitfall  │←────────┘
+                │  .log    │
+                └──────────┘
+                      ↑
+      ┌──────────┐    │
+      │ benchmark│────┘
+      │ (speedup │
+      │  metrics)│
+      └──────────┘
+```
+
+### 0.3 pitfall .log 格式规范
+
+```markdown
+| # | 时间 | 问题描述 | 复现步骤 | 解决方案 | 已解决 | 备注 |
+|---|------|---------|---------|---------|--------|------|
+| N | YYYY-MM-DD ~HH:MM | [描述] | [步骤] | [方案] | ✅/❌ + 原因 | [备注] |
+```
+
+- **时间倒序**: 新问题插入第一行（表头后）
+- **状态标记**: ✅ 已解决 / ❌ 待解决 + 简短原因
+- **分类标签**: 在备注列使用 `[ENV]` `[CUDA]` `[TRITON]` `[TEST]` `[CODEGEN]` `[PERF]` `[OTHER]` 标记
+- **复用 prompt**: AI 通过标准化 prompt 追加新条目，序号自动重排
+- **存储**: 按日期分文件，`docs/pitfall-problems-YYYY-MM-DD.log`
+
+### 0.4 benchmark 输出格式规范
+
+```json
+{
+  "benchmark_name": "divisible_tile_add_1024",
+  "timestamp": "2026-06-26T12:00:00",
+  "case": {
+    "name": "divisible_tile_add",
+    "specialization_expected": true,
+    "input_shape": [1024],
+    "dtype": "float32"
+  },
+  "result": {
+    "baseline_runtime_ms": 0.042,
+    "submitted_runtime_ms": 0.038,
+    "speedup": 1.105,
+    "specialization_hit": true,
+    "mask_expr_count": {"baseline": 6, "submitted": 0, "reduction": 1.0},
+    "stride_expr_count": {"baseline": 3, "submitted": 0, "reduction": 1.0},
+    "pointer_expr_count": {"baseline": 2, "submitted": 1, "reduction": 0.5},
+    "source_line_count": {"baseline": 45, "submitted": 38, "reduction": 0.156},
+    "variant_name": "divisible_contiguous_int32",
+    "passed": true
+  }
+}
+```
+
+---
+
 ## Phase 1: 环境搭建与基线确认（预计 1-2 天）
 
 > **Exit Criteria**: `pytest tests/` 全部通过；CUDA 可用；Triton 编译器可正常生成 kernel；baseline 指标已记录
 
-### 1.1 创建开发分支
+### 1.1 创建开发分支 ✅
 - 分支命名: `2026-spring-Simon-CHOU-T1-2-1`
+- Fork 地址: `https://github.com/Simon-CHOU/ninetoothed`
+- PR 目标: `https://github.com/InfiniTensor/ninetoothed` (main)
 - 基于当前 master (`ef4c528`) 创建
 
 ### 1.2 安装开发环境
@@ -53,6 +176,15 @@
 ### 1.4 收集基线 generated source
 - 选取 2-3 个典型算子（如 element-wise add、matmul），捕获其生成的 Triton 源码
 - 记录 mask 数量、stride 表达式数量、pointer arithmetic 数量作为对比基线
+
+### 🔄 Loop Checkpoint 1
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| `pytest tests/` | 全部通过（允许已知 WONTFIX） | → Phase 1 修复循环 |
+| `torch.cuda.is_available()` | True | → 环境修复 |
+| `triton` import | 成功 | → 环境修复 |
+| Baseline metrics 已记录 | JSON 已保存到 `benchmark/baselines/` | → 补充记录 |
+| pitfall log 已 review | 已知问题已分类 | → 更新 pitfall log |
 
 ---
 
@@ -113,6 +245,15 @@
 - 低效点归类（冗余 mask / 冗余 stride / 冗余 pointer arithmetic / 未命中特化 variant / 广播未简化）
 - 预期的改进后源码形态
 
+### 🔄 Loop Checkpoint 2
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| Weakness cases | ≥2 个完成分析 | → 继续分析 |
+| 量化基线指标 | 每个 case 有 baseline + target 数字 | → 补充测量 |
+| 原型验证 | `is_contiguous` 可行性结论（可行/不可行/降级方案） | → 调整特化选择 |
+| `weakness_analysis.md` | 已输出 | → 继续撰写 |
+| 新 pitfall | 本阶段发现的问题已记录 | → 记录到 pitfall log |
+
 ---
 
 ## Phase 3: 选择特化类别与设计（预计 1-2 天）
@@ -153,6 +294,15 @@
 - 特化路径作为 if-else 分支挂载
 - 确保不符合条件的输入走原路径
 - 添加运行时 assertion（debug 模式）验证特化路径结果与通用路径一致
+
+### 🔄 Loop Checkpoint 3
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| 特化类别选定 | 1-2 个类别已选定 | → 回到 Phase 2 补充分析 |
+| 启用条件 | 每个特化有布尔谓词 | → 继续设计 |
+| 设计不含硬编码 | 无文件名/尺寸/benchmark 名依赖 | → 重设计 |
+| Fallback 路径 | 已文档化 | → 补充设计 |
+| 评分对照 | speedup ≥ 1.10, reduction ≥ 0.25 目标确认 | → 调整预期 |
 
 ---
 
@@ -200,6 +350,16 @@
 - [ ] 确认无硬编码尺寸、文件名、benchmark 名称
 - [ ] 特化条件用布尔谓词验证：手动挑 3 个应命中的输入和 3 个应回退的输入确认行为
 
+### 🔄 Loop Checkpoint 4
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| `pytest tests/` | 全部通过 | → 修复代码 |
+| Fallback 验证 | 非特化输入生成的代码与 baseline 一致 | → 修复 fallback |
+| 特化命中验证 | 特化输入确实触发快速路径 | → 修复启用条件 |
+| `ruff` 检查 | 通过 | → 格式化修复 |
+| 无硬编码 | 确认 | → 修改 |
+| **关键: 编译缓存清除** | `CACHE_DIR` 下的旧缓存已清除 | → `rm -rf ~/.ninetoothed/` |
+
 ---
 
 ## Phase 5: 测试（预计 2-3 天）
@@ -244,16 +404,28 @@
 - variant 名称是否命中
 
 ### 5.4 运行 ntops 全量测试
-- `cd D:\ml\ninetooth2026\ntops && pytest tests/`
+- `cd <workspace>/ntops && pytest tests/`
 - 确保 ninetoothed 的修改不破坏上游算子库
 - **建议在 Phase 4 实现过程中就间歇性运行**，而非等到 Phase 5 最后
 
 ### 5.5 Bug 修复与迭代（新增）
 本阶段发现的任何问题按以下流程处理：
-1. 记录 bug 和复现步骤
+1. 记录 bug 和复现步骤到 pitfall log
 2. 评估修复时间是否在缓冲范围内
 3. 回到 Phase 4 修复 → 运行 Phase 4.4 自查 → 重新运行 Phase 5 测试
 4. 若修复时间超出缓冲，降级为"已知风险"并在报告中说明
+
+### 🔄 Loop Checkpoint 5
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| 新 hit 测试 | ≥2 个通过 | → 补充测试 |
+| 新 fallback 测试 | ≥2 个通过 | → 补充测试 |
+| 新 source 结构测试 | ≥2 个通过 | → 补充测试 |
+| 既有测试 | 全部通过（无退化） | → 修复代码 |
+| 对抗性测试 | ≥5 个/特化通过 | → 分析失败原因 |
+| 防误命中验证 | 0 个误命中 | → 收紧启用条件 |
+| ntops 测试 | 全部通过 | → 分析破坏原因 |
+| 新 pitfall | 本阶段 bug 已记录 | → 记录 |
 
 ---
 
@@ -271,6 +443,7 @@
 - 至少 2 个命中特化的 case
 - 至少 2 个不应命中特化的 fallback case
 - 输出 JSON 或 CSV 格式
+- **使用 `benchmark/runner.py` 的 `BenchmarkRunner` 统一收集指标**
 
 ### 6.2 记录指标
 每个场景至少记录：
@@ -285,6 +458,22 @@
 - 标识性能回退的 case（speedup < 0.95）
 - 分析未覆盖或未改善的场景
 - 若发现 speedup < 1.0 或 reduction ≤ 0：分析根因，必要时回到 Phase 4 修复
+
+### 6.4 运行完整 benchmark suite
+```bash
+cd <workspace>/aicamp2026
+python -m benchmark.runner --all --output results/benchmark_$(date +%Y%m%d_%H%M%S).json
+```
+
+### 🔄 Loop Checkpoint 6
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| Hit case benchmarks | ≥2 个，含 speedup + code metric | → 补充 benchmark |
+| Fallback case benchmarks | ≥2 个，speedup ≥ 0.95 | → 分析回退 |
+| 任何 speedup < 0.95 | 0 个 | → 回到 Phase 4 修复 |
+| 任何 reduction ≤ 0 | 0 个 | → 分析为什么没改善 |
+| 平均 speedup | ≥ 1.10（满分）或记录预期得分 | → 记录风险 |
+| Benchmark JSON | 已输出，格式符合 0.4 规范 | → 修正格式 |
 
 ---
 
@@ -337,11 +526,20 @@
 6. HONOR_CODE.md 和 REFERENCE.md 链接
 7. 赛题报告链接
 
+### 🔄 Loop Checkpoint 7
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| 赛题报告 PDF | 6 项内容齐全 | → 补充 |
+| HONOR_CODE.md | 已署名，AI 使用已披露 | → 补充 |
+| REFERENCE.md | 引用完整 | → 补充 |
+| PR 描述 | 7 项内容齐全 | → 补充 |
+| 交叉引用 | 所有链接有效 | → 修正 |
+
 ---
 
 ## Phase 8: 提交与交叉验证（预计 1 天，7/11 前完成）
 
-> **注意**: 赛题规则注明"提交载体以后续赛题组通知为准"。当前按 GitHub PR 流程准备；若赛题组指定不同提交方式，据此调整。
+> **提交方式**: GitHub PR → `https://github.com/InfiniTensor/ninetoothed` (main)
 
 ### 8.1 最终检查
 - [ ] `pytest tests/` 全部通过（无跳过、无弱化）
@@ -357,15 +555,23 @@
 ### 8.2 创建 PR
 - 分支: `2026-spring-Simon-CHOU-T1-2-1`
 - 标题: `[2026春季][T1-2-1] Simon-CHOU`
-- 目标: InfiniTensor/ninetoothed main 分支（暂定；以赛题组最终通知为准）
+- 目标: `InfiniTensor/ninetoothed` main 分支
 
-### 8.3 如需要配套 ntops PR
-- 在 `D:\ml\ninetooth2026\ntops` 创建配套 PR（如需要新增 benchmark 算子）
-- 两侧 PR 交叉引用
+### 8.3 ntops 验证（无需单独 PR）
+- 在 `<workspace>/ntops` 运行全量测试确保 ninetoothed 修改不破坏算子库
+- ntops 仅作为本地验证试验场，**不需要**提交配套 PR
 
 ### 8.4 PR Review 响应（预留）
 - 如维护者在截止前提出修改意见，优先响应
 - 预留 1 天（7/12）处理 reviewer 反馈
+
+### 🔄 Loop Checkpoint 8
+| 检查项 | 通过条件 | 失败动作 |
+|--------|---------|---------|
+| 最终 pytest | 全部通过 | → 修复 |
+| PR 内容完整 | 所有必须项齐全 | → 补充 |
+| ntops 兼容 | 测试通过或不破坏 | → 修复或说明 |
+| 提交就绪 | PR ready | → 提交 |
 
 ---
 
@@ -384,15 +590,17 @@
 | 浮点误差导致 correctness 不通过 | 🟢 Minor | 保持数值计算路径与 baseline 一致，特化只改变 mask/pointer/stride |
 | 性能回退 | 🟢 Minor | 每个 benchmark case 同时测 baseline 和 submitted，确保 speedup ≥ 1.0 |
 | 时间不足 | 🟢 Minor | 优先完成 1 个特化类别的完整闭环，再扩展第 2 个；7/12 缓冲日 |
-| 赛题提交方式变更 | 🟡 Major | 关注官方通知；PR 结构保持可转换性；不投资提交专用工具 |
+| ~~赛题提交方式变更~~ | ✅ Resolved | 确认 GitHub PR → `InfiniTensor/ninetoothed` main 分支 |
 | 编译缓存干扰 | 🟢 Minor | 修改生成逻辑后清除 SHA256 缓存（generation.py L873-881），确保新代码生效 |
 | 特化误命中 fallback case 扣分 | 🟡 Major | Phase 5.0 防误命中验证；启用条件收紧——宁可漏过也不错杀 |
 | ntops 因 ninetoothed 改动而破坏 | 🟡 Major | Phase 4 实现中持续运行 ntops 测试；锁定 ntops commit |
+| **Loop 工程状态丢失** | 🟡 Major | loop engine 的 state 持久化到 `aicamp2026/.loop_state.json`；每阶段开始前自动恢复 |
 
 ## 时间线概览
 
 ```
-Phase 1: 环境搭建       ██░░░░░░░░░░  6/25-6/26
+Phase 0: 基础设施搭建    █░░░░░░░░░░░  6/26（完成）
+Phase 1: 环境搭建       ██░░░░░░░░░░  6/26-6/27
 Phase 2: Weakness分析    ███░░░░░░░░░  6/27-6/29
 Phase 3: 设计选择        ██░░░░░░░░░░  6/30-7/01
 Phase 4: 实现           █████░░░░░░░  7/02-7/05
@@ -410,6 +618,8 @@ DEADLINE                                    7/13 0:00 截止 ←
 
 **迭代路径**: Phase 5 或 Phase 6 发现问题 → 评估修复时间 → 回到 Phase 4 → Phase 4.4 自查 → Phase 5 → Phase 6。最多迭代 2 轮；超出则降级为已知风险并记录在报告中。
 
+**Loop 工程迭代**: 每次 Phase 切换时 loop engine 自动运行 checkpoint 评估 → 不通过则卡在当前 Phase 继续迭代 → 通过则推进到下一 Phase。AI 读取 loop state 确定当前应该做什么。
+
 ---
 
 ## 评分对照速查
@@ -421,3 +631,34 @@ DEADLINE                                    7/13 0:00 截止 ←
 | Generated Code Metric | 20 | reduction ≥ 0.25 | reduction ≤ 0 得 0 分 |
 | Runtime | 20 | speedup ≥ 1.10 | speedup < 0.95 得 0 分 |
 | 工程与报告质量 | 10 | weakness analysis、fallback 设计、代码边界、无硬编码 | — |
+
+---
+
+## Loop 工程使用指南
+
+### 快速启动
+```bash
+# 初始化 loop engine
+cd <workspace>/aicamp2026
+python -m loop.engine --init
+
+# 查看当前状态
+python -m loop.engine --status
+
+# 运行当前 phase 的 checkpoint
+python -m loop.engine --checkpoint
+
+# 运行 benchmark
+python -m benchmark.runner --all --output results/latest.json
+
+# 记录 pitfall
+python -m pitfall add "问题描述" "复现步骤" "解决方案" --category CODEGEN
+```
+
+### AI 集成接口
+AI agent 通过以下接口与 loop engine 交互：
+1. `loop.engine.LoopEngine.get_context()` → 返回当前 phase、状态、待解决问题
+2. `loop.orchestrator.LoopOrchestrator.next_action()` → 返回 AI 应执行的下一步
+3. `benchmark.runner.BenchmarkRunner.run_all()` → 收集指标
+4. `benchmark.testeval.TestEval.evaluate()` → 全面评测
+5. `pitfall.tracker.PitfallTracker.log()` → 记录问题
